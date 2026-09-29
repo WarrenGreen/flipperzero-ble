@@ -1,6 +1,8 @@
 import asyncio
 from typing import TYPE_CHECKING
 
+from .apps import AppSession
+
 if TYPE_CHECKING:
     from .client import Flipper
 
@@ -46,30 +48,27 @@ def parse(contents: bytes | str) -> dict[str, str]:
     return fields
 
 
-class SubGhzSession:
+class SubGhzSession(AppSession):
     """Keeps the Sub-GHz app open in RPC mode for a series of transmissions."""
 
     def __init__(self, flipper: "Flipper"):
-        self._flipper = flipper
+        super().__init__(flipper, APP_NAME)
         self._used_scratch = False
 
-    async def __aenter__(self) -> "SubGhzSession":
-        await self._flipper.apps.start(APP_NAME, "RPC")
-        await asyncio.sleep(1.0)
-        return self
-
     async def __aexit__(self, *exc) -> None:
-        await self._flipper.apps.exit()
-        if self._used_scratch:
+        await super().__aexit__(*exc)
+        if self._used_scratch and self._flipper.connected:
             await self._flipper.storage.delete(SCRATCH_PATH, missing_ok=True)
 
     async def send_file(self, path: str, seconds: float = 0.5) -> None:
         """Transmits a `.sub` file already on the Flipper, holding "send" for `seconds`."""
         # The app rejects a second press on the same load, so load before every press.
-        await self._flipper.apps.load_file(path)
-        await self._flipper.apps.press()
-        await asyncio.sleep(seconds)
-        await self._flipper.apps.release()
+        await self.load_file(path)
+        await self.press()
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            await self.release()
 
     async def send(self, contents: bytes, seconds: float = 0.5) -> None:
         """Transmits `.sub` file contents (e.g. from key_file) via a scratch file on the SD card."""
@@ -79,7 +78,10 @@ class SubGhzSession:
 
 
 class SubGhz:
-    """Transmit Sub-GHz signals. Only transmit where you're permitted to and on devices you own."""
+    """Transmit Sub-GHz signals. Only transmit where you're permitted to and on devices you own.
+
+    Transmissions the Flipper's region settings don't allow raise AppError.
+    """
 
     def __init__(self, flipper: "Flipper"):
         self._flipper = flipper
@@ -94,3 +96,7 @@ class SubGhz:
     async def transmit(self, contents: bytes, seconds: float = 0.5) -> None:
         async with self.session() as session:
             await session.send(contents, seconds)
+
+    async def info(self, path: str) -> dict[str, str]:
+        """Reads the header fields of a `.sub` file on the Flipper (Frequency, Preset, Protocol, ...)."""
+        return parse(await self._flipper.storage.read(path))

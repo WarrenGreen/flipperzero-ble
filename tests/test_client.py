@@ -98,3 +98,104 @@ def test_gui_press_sends_press_short_release():
     run(main())
     events = [(c[0].gui_send_input_event_request.key, c[0].gui_send_input_event_request.type) for c in transport.commands]
     assert events == [(gui_pb2.OK, gui_pb2.PRESS), (gui_pb2.OK, gui_pb2.SHORT), (gui_pb2.OK, gui_pb2.RELEASE)]
+
+
+def test_write_stops_sending_once_the_flipper_rejects_it():
+    def handler(command):
+        return [flipper_pb2.Main(command_status=flipper_pb2.ERROR_STORAGE_DENIED)]
+
+    transport = FakeTransport(handler)
+
+    async def main():
+        flipper = Flipper(transport)
+        # The fake only replies to complete commands, so reply to the first part as the firmware would.
+        original_send = transport.send
+
+        async def send(data):
+            await original_send(data)
+            if transport._current and len(transport._current) == 1:
+                transport.push(flipper_pb2.Main(command_id=transport._current[0].command_id,
+                                                command_status=flipper_pb2.ERROR_STORAGE_DENIED))
+                await asyncio.sleep(0)
+
+        transport.send = send
+        with pytest.raises(FlipperError) as exc:
+            await flipper.storage.write("/int/locked.bin", bytes(WRITE_CHUNK_SIZE * 4))
+        assert exc.value.status == "ERROR_STORAGE_DENIED"
+
+    run(main())
+    assert len(transport._current) < 4
+
+
+def test_write_and_read_report_progress():
+    from .fakes import FakeFilesystem
+
+    fs = FakeFilesystem()
+    data = bytes(1300)
+    written, read = [], []
+
+    async def main():
+        flipper = Flipper(FakeTransport(fs))
+        await flipper.storage.write("/ext/a.bin", data, progress=lambda done, total: written.append((done, total)))
+        return await flipper.storage.read("/ext/a.bin", progress=lambda done, total: read.append((done, total)))
+
+    assert run(main()) == data
+    assert written == [(512, 1300), (1024, 1300), (1300, 1300)]
+    assert read == [(512, 1300), (1024, 1300), (1300, 1300)]
+
+
+def test_disconnect_fails_pending_requests_and_subscriptions():
+    from flipperzero_ble.errors import FlipperDisconnectedError
+
+    transport = FakeTransport(lambda command: [])
+
+    async def main():
+        flipper = Flipper(transport)
+        subscription = flipper.subscribe("desktop_status")
+        pending = asyncio.ensure_future(flipper.system.ping(b"x"))
+        await asyncio.sleep(0)
+        transport.disconnect()
+        with pytest.raises(FlipperDisconnectedError):
+            await pending
+        with pytest.raises(FlipperDisconnectedError):
+            await subscription.get(timeout=1)
+        assert not flipper.connected
+        await asyncio.wait_for(flipper.wait_disconnected(), 1)
+        with pytest.raises(FlipperDisconnectedError):
+            await flipper.system.ping()
+
+    run(main())
+
+
+def test_subscription_keeps_newest_messages_when_bounded():
+    transport = FakeTransport(lambda command: [ok()])
+
+    async def main():
+        flipper = Flipper(transport)
+        with flipper.subscribe("desktop_status", maxsize=2) as statuses:
+            for locked in (True, False, True):
+                transport.push(flipper_pb2.Main(desktop_status={"locked": locked}))
+            transport.push(flipper_pb2.Main(gui_screen_frame={"data": b""}))  # other kinds are ignored
+            await asyncio.sleep(0.01)
+            received = [(await statuses.get(timeout=1)).locked for _ in range(2)]
+        assert [s async for s in statuses] == []  # closed subscriptions end iteration
+        return received
+
+    assert run(main()) == [False, True]
+
+
+def test_listeners_still_receive_unprompted_messages():
+    transport = FakeTransport(lambda command: [ok()])
+    seen = []
+
+    async def main():
+        flipper = Flipper(transport)
+        unsubscribe = flipper.add_listener(lambda message: seen.append(message.WhichOneof("content")))
+        transport.push(flipper_pb2.Main(desktop_status={"locked": True}))
+        await asyncio.sleep(0.01)
+        unsubscribe()
+        transport.push(flipper_pb2.Main(desktop_status={"locked": True}))
+        await asyncio.sleep(0.01)
+
+    run(main())
+    assert seen == ["desktop_status"]
