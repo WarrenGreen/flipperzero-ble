@@ -177,3 +177,7 @@ def test_session_exit_waits_until_the_flipper_unlocks():
 
     run(main())
     assert kinds(transport)[-3:] == ["app_lock_status_request"] * 3
+
+
+def test_app_error_without_text_is_readable():
+    assert "rejected the command" in str(AppError("ERROR_APP_CMD_ERROR", 0, ""))

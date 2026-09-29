@@ -20,7 +20,8 @@ class AppError(FlipperError):
     """An app running in RPC mode rejected a command. `code` and `text` are the app's own error details."""
 
     def __init__(self, status: str, code: int, text: str):
-        super().__init__(status, f"{text} (app error {code})" if text else f"{status} (app error {code})")
+        message = f"{text} (app error {code})" if text else f"The app rejected the command without saying why ({status})"
+        super().__init__(status, message)
         self.code = code
         self.text = text
 
