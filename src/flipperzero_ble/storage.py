@@ -131,7 +131,7 @@ class Storage:
                 raise
 
     async def rename(self, old_path: str, new_path: str) -> None:
-        """Moves or renames a file or directory. Fails with ERROR_STORAGE_EXIST if `new_path` exists."""
+        """Moves or renames a file or directory. An existing file at `new_path` is replaced."""
         await self._flipper.request(storage_rename_request={"old_path": old_path, "new_path": new_path})
 
     async def md5(self, path: str) -> str:
@@ -186,7 +186,12 @@ class Storage:
                     progress(done, found)
 
     async def extract(self, tar_path: str, out_path: str) -> None:
-        """Unpacks a .tar archive on the Flipper into the directory `out_path`."""
+        """Unpacks a .tar archive on the Flipper into the directory `out_path`, creating it if needed.
+
+        The Flipper doesn't create folders for files on its own, so the archive must list each folder before
+        the files in it, as the `tar` command does. Raises ERROR_STORAGE_INTERNAL otherwise.
+        """
+        await self.mkdir(out_path, parents=True)
         await self._flipper.request(storage_tar_extract_request={"tar_path": tar_path, "out_path": out_path})
 
     async def backup(self, archive_path: str) -> None:

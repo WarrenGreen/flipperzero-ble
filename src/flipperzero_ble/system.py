@@ -5,7 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from ._proto import system_pb2
-from .errors import FlipperError
+from .errors import FlipperDisconnectedError, FlipperError
 
 if TYPE_CHECKING:
     from .client import Flipper
@@ -82,8 +82,7 @@ class System:
         """Restarts the Flipper, which ends the connection. Modes: "os" (normal), "dfu" (firmware recovery),
         "update" (install the update prepared with update())."""
         mode = RebootMode[mode.upper()] if isinstance(mode, str) else mode
-        # The Flipper reboots without replying.
-        await self._flipper.send(system_reboot_request={"mode": mode.value})
+        await self._send_and_drop(system_reboot_request={"mode": mode.value})
 
     async def update(self, manifest_path: str) -> None:
         """Stages a firmware update from an unpacked update package on the SD card, e.g.
@@ -98,4 +97,11 @@ class System:
 
     async def factory_reset(self) -> None:
         """Erases internal storage (settings, pairings, saved keys on /int) and reboots. The SD card is kept."""
-        await self._flipper.send(system_factory_reset_request={})
+        await self._send_and_drop(system_factory_reset_request={})
+
+    async def _send_and_drop(self, **content) -> None:
+        # The Flipper restarts without replying, often before it has even acknowledged the Bluetooth write.
+        try:
+            await self._flipper.send(**content)
+        except FlipperDisconnectedError:
+            pass

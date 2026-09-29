@@ -124,3 +124,19 @@ def test_desktop_lock_state_and_changes():
 def test_gpio_mode_of_unconfigured_pin_is_none():
     transport = FakeTransport(lambda c: [flipper_pb2.Main(command_status=flipper_pb2.ERROR_GPIO_UNKNOWN_PIN_MODE)])
     assert run(Flipper(transport).gpio.mode("PA7")) is None
+
+
+def test_reboot_tolerates_the_link_dropping_mid_write():
+    from flipperzero_ble.errors import FlipperDisconnectedError
+
+    transport = FakeTransport(lambda command: None)
+
+    async def send(data):
+        raise FlipperDisconnectedError("The Flipper disconnected")
+
+    transport.send = send
+
+    async def main():
+        await Flipper(transport).system.reboot()
+
+    run(main())

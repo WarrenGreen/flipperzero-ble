@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from bleak import BleakClient
+from bleak.exc import BleakError
 
 from .discovery import FlipperDevice
 from .errors import FlipperDisconnectedError
@@ -87,7 +88,12 @@ class BleTransport:
             self._free_space -= size
             if self._free_space <= 0:
                 self._space_available.clear()
-            await self._client.write_gatt_char(TX_TO_FLIPPER, chunk, response=True)
+            try:
+                await self._client.write_gatt_char(TX_TO_FLIPPER, chunk, response=True)
+            except BleakError as exc:
+                if not self._connected or not self._client.is_connected or "disconnected" in str(exc):
+                    raise FlipperDisconnectedError("The Flipper disconnected") from exc
+                raise
 
     async def close(self) -> None:
         self._connected = False

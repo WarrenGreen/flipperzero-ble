@@ -101,5 +101,15 @@ def test_backup_restore_extract_send_paths():
         await flipper.storage.extract("/ext/pkg.tar", "/ext/pkg")
 
     run(main())
-    assert kinds(transport) == ["storage_backup_create_request", "storage_backup_restore_request", "storage_tar_extract_request"]
-    assert transport.commands[2][0].storage_tar_extract_request.out_path == "/ext/pkg"
+    assert kinds(transport) == ["storage_backup_create_request", "storage_backup_restore_request", "storage_mkdir_request", "storage_tar_extract_request"]
+    assert transport.commands[3][0].storage_tar_extract_request.out_path == "/ext/pkg"
+
+
+def test_extract_creates_the_destination_first():
+    transport = FakeTransport(lambda command: [ok()])
+
+    async def main():
+        await Flipper(transport).storage.extract("/ext/pkg.tar", "/ext/out")
+
+    run(main())
+    assert kinds(transport)[-2:] == ["storage_mkdir_request", "storage_tar_extract_request"]
