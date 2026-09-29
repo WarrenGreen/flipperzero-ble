@@ -61,6 +61,7 @@ asyncio.run(main())
 | `flipper.subghz` | `transmit_file`, `transmit`, `session()`, `info`; module functions `key_file()` and `parse()` |
 | `flipper.infrared` | `send(path, button)`, `send_signal`, `signals`, `session()`; module functions `parsed_signal()`, `raw_signal()`, `remote_file()`, `parse()` |
 | `flipper.nfc`, `flipper.rfid`, `flipper.ibutton` | `emulate(path)`, `emulate_for(path, seconds)`, `saved()` |
+| `flipper.scripts` | `run(source, seconds)`, `run_and_read(source, output_path, seconds)`, `session(path)` |
 
 Failed commands raise `FlipperError`, with `.status` set to the protocol's status name (for example `ERROR_STORAGE_NOT_EXIST`). When an app in RPC mode rejects a command, you get `AppError`, a subclass carrying the app's own explanation in `.code` and `.text` (for example "Transmission on this frequency is restricted in your region"). If the Bluetooth link drops, waiting requests and subscriptions raise `FlipperDisconnectedError`; `flipper.connected` and `await flipper.wait_disconnected()` tell you when that happens.
 
@@ -147,6 +148,27 @@ async with flipperzero_ble.connect() as flipper:
 
 `Screen` converts between the screen stream's page layout (`from_frame`/`to_frame`), XBM (`from_xbm`/`to_xbm`), text art, Pillow images (`from_image`), terminal text and PNG.
 
+### Running scripts (reaching a serial module / dev board)
+
+The RPC protocol can't talk to a module on the GPIO serial pins (a WiFi dev board, an ESP32, a UART sensor).
+A JavaScript file on the Flipper can, so `flipper.scripts` runs one on the built-in JS Runner. A script has no
+return value over Bluetooth, so it writes a file and you read it back.
+
+```python
+from pathlib import Path
+
+async with flipperzero_ble.connect() as flipper:
+    # examples/serial_relay.js opens the USART (pins 13/14), sends "help\n", and logs the reply to a file.
+    output = await flipper.scripts.run_and_read(
+        Path("examples/serial_relay.js"), "/ext/.serial_out.txt", seconds=8
+    )
+    print(output.decode("utf-8", "replace"))
+```
+
+`scripts.run()` runs a script (a local `.js` file, or inline text) for a set time and closes the runner.
+Scripts run on the Flipper's small mJS engine, which is quirky: prefer `while` loops over `for`, and flush
+files as you go (open/append/close), because the runner is closed by force and won't flush a file left open.
+
 ### GPIO
 
 ```python
@@ -201,6 +223,7 @@ flipperzero-ble [-d NAME_OR_ADDRESS] <command>
   ir-list PATH               list the buttons in an .ir remote
   ir-tx PATH BUTTON [--hold SECONDS]     send a button by name or index
   emulate nfc|rfid|ibutton PATH [--seconds N]
+  script PATH [--seconds N] [--read REMOTE]   run a .js file, optionally printing a file it wrote
 ```
 
 Set `FLIPPER_DEVICE` to avoid passing `-d` every time. On macOS the address is a per-Mac UUID rather than the Flipper's real Bluetooth address, so using the Flipper's name is simpler.

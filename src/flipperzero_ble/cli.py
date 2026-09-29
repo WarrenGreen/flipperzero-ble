@@ -220,6 +220,17 @@ async def cmd_ir_list(flipper: Flipper, args) -> None:
         print(f"{i:>3}  {signal.name}  ({signal.protocol or signal.type})")
 
 
+async def cmd_script(flipper: Flipper, args) -> None:
+    from pathlib import Path
+    source = Path(args.path)
+    if args.read:
+        out = await flipper.scripts.run_and_read(source, args.read, seconds=args.seconds)
+        sys.stdout.buffer.write(out)
+    else:
+        await flipper.scripts.run(source, seconds=args.seconds)
+        print(f"Ran {args.path} for {args.seconds:g}s")
+
+
 async def cmd_emulate(flipper: Flipper, args) -> None:
     emulator = getattr(flipper, args.kind)
     async with emulator.emulate(args.path):
@@ -324,6 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
     ir.add_argument("button", help="button name, or index from ir-list")
     ir.add_argument("--hold", type=float, metavar="SECONDS", help="hold the button (repeating) this long")
     add("ir-list", cmd_ir_list, "list the buttons in an .ir remote").add_argument("path")
+    script = add("script", cmd_script, "run a .js file on the Flipper's JS runner")
+    script.add_argument("path", help="a local .js file to upload and run")
+    script.add_argument("--seconds", type=float, default=5.0, help="how long to let it run before closing it")
+    script.add_argument("--read", metavar="REMOTE", help="after running, print this file the script wrote")
     emulate = add("emulate", cmd_emulate, "emulate a saved NFC tag, RFID card or iButton key")
     emulate.add_argument("kind", choices=EMULATORS)
     emulate.add_argument("path")

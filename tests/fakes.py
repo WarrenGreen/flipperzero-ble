@@ -128,6 +128,15 @@ class FakeFilesystem:
                 return missing
             self.files[request.path] = b"".join(part.storage_write_request.file.data for part in command)
             return [ok()]
+        if kind == "storage_delete_request":
+            existed = request.path in self.files or request.path in self.dirs
+            self.files.pop(request.path, None)
+            self.dirs.discard(request.path)
+            if request.recursive:
+                for p in [*self.files, *self.dirs]:
+                    if p.startswith(request.path + "/"):
+                        self.files.pop(p, None); self.dirs.discard(p)
+            return [ok()] if existed else missing
         if kind == "storage_mkdir_request":
             if request.path in self.dirs:
                 return [flipper_pb2.Main(command_status=flipper_pb2.ERROR_STORAGE_EXIST)]
@@ -135,4 +144,6 @@ class FakeFilesystem:
                 return missing
             self.dirs.add(request.path)
             return [ok()]
-        raise AssertionError(f"FakeFilesystem can't handle {kind}")
+        if kind.startswith("storage_"):
+            raise AssertionError(f"FakeFilesystem can't handle {kind}")
+        return [ok()]  # non-storage commands (app start/exit, gui input) just succeed
