@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.25", "grpcio-tools==1.84.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flipperzero-ble"
+version = "0.1.0"
+description = "Control a Flipper Zero over Bluetooth LE from Python using its protobuf RPC protocol"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Warren Green" }]
+requires-python = ">=3.10"
+dependencies = [
+    "bleak>=0.22",
+    "protobuf>=7.35.1,<8",
+]
+keywords = ["flipper", "flipper-zero", "bluetooth", "ble", "rpc", "sub-ghz"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Hardware",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+flipperzero-ble = "flipperzero_ble.cli:main"
+
+[project.urls]
+Repository = "https://github.com/WarrenGreen/flipperzero-ble"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flipperzero_ble"]
+artifacts = ["src/flipperzero_ble/_proto/*_pb2.py"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
