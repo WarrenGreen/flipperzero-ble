@@ -52,7 +52,7 @@ def test_session_waits_for_app_state_not_a_fixed_delay():
         return time.monotonic() - start
 
     assert run(main()) < 0.5
-    assert kinds(transport) == ["app_start_request", "app_button_press_release_request", "app_exit_request"]
+    assert kinds(transport) == ["app_start_request", "app_button_press_release_request", "app_exit_request", "app_lock_status_request"]
 
 
 def test_session_exit_tolerates_app_already_closed():
@@ -105,13 +105,13 @@ def test_infrared_send_by_name_and_index():
 
     run(main())
     assert kinds(transport) == [
-        "app_start_request", "app_load_file_request", "app_button_press_release_request", "app_exit_request",
+        "app_start_request", "app_load_file_request", "app_button_press_release_request", "app_exit_request", "app_lock_status_request",
         "app_start_request", "app_load_file_request", "app_button_press_request", "app_button_release_request",
-        "app_exit_request",
+        "app_exit_request", "app_lock_status_request",
     ]
     assert transport.commands[0][0].app_start_request.name == "Infrared"
     assert transport.commands[2][0].app_button_press_release_request.args == "Power"
-    assert transport.commands[6][0].app_button_press_request.index == 2
+    assert transport.commands[7][0].app_button_press_request.index == 2
 
 
 def test_infrared_send_signal_uses_scratch_file_and_cleans_up():
@@ -123,7 +123,7 @@ def test_infrared_send_signal_uses_scratch_file_and_cleans_up():
     run(main())
     assert kinds(transport) == [
         "app_start_request", "storage_write_request", "app_load_file_request",
-        "app_button_press_release_request", "app_exit_request", "storage_delete_request",
+        "app_button_press_release_request", "app_exit_request", "app_lock_status_request", "storage_delete_request",
     ]
 
 
@@ -135,7 +135,7 @@ def test_emulation_loads_file_then_exits(attr, app):
         await getattr(Flipper(transport), attr).emulate_for("/ext/card", seconds=0)
 
     run(main())
-    assert kinds(transport) == ["app_start_request", "app_load_file_request", "app_exit_request"]
+    assert kinds(transport) == ["app_start_request", "app_load_file_request", "app_exit_request", "app_lock_status_request"]
     assert transport.commands[0][0].app_start_request.name == app
     assert transport.commands[0][0].app_start_request.args == "RPC"
 
@@ -157,4 +157,23 @@ def test_emulation_exits_app_when_file_fails_to_load():
                 pass
 
     run(main())
-    assert kinds(transport)[-1] == "app_exit_request"
+    assert kinds(transport)[-2:] == ["app_exit_request", "app_lock_status_request"]
+
+
+def test_session_exit_waits_until_the_flipper_unlocks():
+    lock_checks = []
+
+    def handler(command):
+        if command[0].WhichOneof("content") == "app_lock_status_request":
+            lock_checks.append(True)
+            return [ok(app_lock_status_response={"locked": len(lock_checks) < 3})]
+        return [ok()]
+
+    transport = FakeTransport(handler)
+
+    async def main():
+        async with Flipper(transport).apps.session("Infrared"):
+            pass
+
+    run(main())
+    assert kinds(transport)[-3:] == ["app_lock_status_request"] * 3

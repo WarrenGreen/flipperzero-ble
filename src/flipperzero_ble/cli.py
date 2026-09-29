@@ -191,7 +191,8 @@ async def cmd_gpio(flipper: Flipper, args) -> None:
         await gpio.set_mode(args.pin, "output")
         await gpio.write(args.pin, args.value == "1")
     elif args.action == "mode":
-        print((await gpio.mode(args.pin)).name.lower())
+        mode = await gpio.mode(args.pin)
+        print(mode.name.lower() if mode else "unconfigured")
 
 
 async def cmd_app(flipper: Flipper, args) -> None:

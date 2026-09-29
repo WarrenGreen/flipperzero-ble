@@ -119,3 +119,8 @@ def test_desktop_lock_state_and_changes():
 
     assert run(main()) == [True, False, True]
     assert kinds(transport)[-2:] == ["desktop_status_subscribe_request", "desktop_status_unsubscribe_request"]
+
+
+def test_gpio_mode_of_unconfigured_pin_is_none():
+    transport = FakeTransport(lambda c: [flipper_pb2.Main(command_status=flipper_pb2.ERROR_GPIO_UNKNOWN_PIN_MODE)])
+    assert run(Flipper(transport).gpio.mode("PA7")) is None

@@ -28,7 +28,7 @@ def test_session_loads_before_every_press_and_cleans_up():
     asyncio.run(main())
     kinds = [c[0].WhichOneof("content") for c in transport.commands]
     send = ["storage_write_request", "app_load_file_request", "app_button_press_request", "app_button_release_request"]
-    assert kinds == ["app_start_request", *send, *send, "app_exit_request", "storage_delete_request"]
+    assert kinds == ["app_start_request", *send, *send, "app_exit_request", "app_lock_status_request", "storage_delete_request"]
     assert transport.commands[-1][0].storage_delete_request.path == SCRATCH_PATH
 
 

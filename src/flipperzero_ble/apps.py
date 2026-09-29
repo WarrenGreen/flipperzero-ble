@@ -132,6 +132,7 @@ class AppSession:
                     pass  # the app already closed, e.g. someone pressed Back on the Flipper
                 else:
                     await self._wait_for(AppState.CLOSED, 5.0)
+                    await self._wait_until_unlocked(2.0)
         finally:
             self._states.close()
 
@@ -145,6 +146,12 @@ class AppSession:
                 return
             if notice.state == state:
                 return
+
+    async def _wait_until_unlocked(self, timeout: float) -> None:
+        # The app reports APP_CLOSED a little before the Flipper lets another app start (~0.1-0.3 s).
+        deadline = asyncio.get_running_loop().time() + timeout
+        while await self.apps.is_locked() and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.05)
 
     async def load_file(self, path: str) -> None:
         await self.apps.load_file(path)

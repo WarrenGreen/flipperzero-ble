@@ -2,6 +2,7 @@ from enum import IntEnum
 from typing import TYPE_CHECKING
 
 from ._proto import gpio_pb2
+from .errors import FlipperError
 
 if TYPE_CHECKING:
     from .client import Flipper
@@ -64,8 +65,14 @@ class Gpio:
         mode = PinMode[mode.upper()] if isinstance(mode, str) else mode
         await self._flipper.request(gpio_set_pin_mode={"pin": _pin(pin), "mode": mode})
 
-    async def mode(self, pin: Pin | str | int) -> PinMode:
-        parts = await self._flipper.request(gpio_get_pin_mode={"pin": _pin(pin)})
+    async def mode(self, pin: Pin | str | int) -> PinMode | None:
+        """The pin's mode, or None if it hasn't been set to input or output (pins start unconfigured)."""
+        try:
+            parts = await self._flipper.request(gpio_get_pin_mode={"pin": _pin(pin)})
+        except FlipperError as exc:
+            if exc.status == "ERROR_GPIO_UNKNOWN_PIN_MODE":
+                return None
+            raise
         return PinMode(parts[0].gpio_get_pin_mode_response.mode)
 
     async def set_pull(self, pin: Pin | str | int, pull: Pull | str) -> None:
