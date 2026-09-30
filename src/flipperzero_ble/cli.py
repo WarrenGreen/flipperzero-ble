@@ -231,6 +231,16 @@ async def cmd_script(flipper: Flipper, args) -> None:
         print(f"Ran {args.path} for {args.seconds:g}s")
 
 
+async def cmd_serial(flipper: Flipper, args) -> None:
+    if args.command:
+        reply = await flipper.serial.command(args.command, baud=args.baud, read_seconds=args.read)
+    else:
+        reply = (await flipper.serial.read(baud=args.baud, read_seconds=args.read)).decode("utf-8", "replace")
+    sys.stdout.write(reply)
+    if reply and not reply.endswith("\n"):
+        sys.stdout.write("\n")
+
+
 async def cmd_emulate(flipper: Flipper, args) -> None:
     emulator = getattr(flipper, args.kind)
     async with emulator.emulate(args.path):
@@ -343,6 +353,10 @@ def build_parser() -> argparse.ArgumentParser:
     emulate.add_argument("kind", choices=EMULATORS)
     emulate.add_argument("path")
     emulate.add_argument("--seconds", type=float, help="stop after this long (default: until Ctrl-C)")
+    serial = add("serial", cmd_serial, "send a line to a device on the GPIO serial pins and print its reply")
+    serial.add_argument("command", nargs="?", help="text to send (omit to only listen)")
+    serial.add_argument("--baud", type=int, default=115200)
+    serial.add_argument("--read", type=float, default=3.0, metavar="SECONDS", help="how long to read the reply")
     return parser
 
 

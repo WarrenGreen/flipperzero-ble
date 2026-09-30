@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flipperzero-ble"
-version = "0.2.0"
+version = "0.3.0"
 description = "Control a Flipper Zero over Bluetooth LE from Python using its protobuf RPC protocol"
 readme = "README.md"
 license = "MIT"

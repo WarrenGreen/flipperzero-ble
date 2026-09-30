@@ -62,6 +62,7 @@ asyncio.run(main())
 | `flipper.infrared` | `send(path, button)`, `send_signal`, `signals`, `session()`; module functions `parsed_signal()`, `raw_signal()`, `remote_file()`, `parse()` |
 | `flipper.nfc`, `flipper.rfid`, `flipper.ibutton` | `emulate(path)`, `emulate_for(path, seconds)`, `saved()` |
 | `flipper.scripts` | `run(source, seconds)`, `run_and_read(source, output_path, seconds)`, `session(path)` |
+| `flipper.serial` | `command(text)`, `read()`, `exchange(bytes)` — talk to a device on the GPIO UART pins |
 
 Failed commands raise `FlipperError`, with `.status` set to the protocol's status name (for example `ERROR_STORAGE_NOT_EXIST`). When an app in RPC mode rejects a command, you get `AppError`, a subclass carrying the app's own explanation in `.code` and `.text` (for example "Transmission on this frequency is restricted in your region"). If the Bluetooth link drops, waiting requests and subscriptions raise `FlipperDisconnectedError`; `flipper.connected` and `await flipper.wait_disconnected()` tell you when that happens.
 
@@ -169,6 +170,23 @@ async with flipperzero_ble.connect() as flipper:
 Scripts run on the Flipper's small mJS engine, which is quirky: prefer `while` loops over `for`, and flush
 files as you go (open/append/close), because the runner is closed by force and won't flush a file left open.
 
+### Serial (talking to a device on the GPIO pins)
+
+`flipper.serial` sends a line to a device on the Flipper's UART pins (header pin 13 TX / 14 RX) and returns its
+reply. It's built on `flipper.scripts` and works around the JS engine's limits (it streams incoming bytes to a
+file instead of holding them in the runner's ~2 KB stack, and wakes the line before sending), so it reliably
+captures a device's response where a naive relay crashes.
+
+```python
+async with flipperzero_ble.connect() as flipper:
+    print(await flipper.serial.command("help", read_seconds=6))   # e.g. an ESP32 Marauder board's CLI
+    boot = await flipper.serial.read(read_seconds=3)              # just listen (catch boot output)
+    raw = await flipper.serial.exchange(b"AT\r\n")               # bytes in, bytes out
+```
+
+Only drive serial lines you're allowed to. This is generic UART plumbing; it doesn't wrap any particular
+device's commands.
+
 ### GPIO
 
 ```python
@@ -224,6 +242,7 @@ flipperzero-ble [-d NAME_OR_ADDRESS] <command>
   ir-tx PATH BUTTON [--hold SECONDS]     send a button by name or index
   emulate nfc|rfid|ibutton PATH [--seconds N]
   script PATH [--seconds N] [--read REMOTE]   run a .js file, optionally printing a file it wrote
+  serial [COMMAND] [--baud B] [--read SECONDS]  send a line to a GPIO-serial device and print its reply
 ```
 
 Set `FLIPPER_DEVICE` to avoid passing `-d` every time. On macOS the address is a per-Mac UUID rather than the Flipper's real Bluetooth address, so using the Flipper's name is simpler.

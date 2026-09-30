@@ -13,6 +13,7 @@ from .gpio import Gpio
 from .gui import Gui
 from .infrared import Infrared
 from .scripts import Scripts
+from .serial import Serial
 from .storage import Storage
 from .subghz import SubGhz
 from .system import System
@@ -83,7 +84,7 @@ class Flipper:
     """An RPC session with a Flipper Zero.
 
     Feature helpers live on `storage`, `system`, `apps`, `gui`, `gpio`, `desktop`, `subghz`, `infrared`, `nfc`,
-    `rfid`, `ibutton` and `scripts`. Anything else in the protocol can be sent with `request()` using the PB.Main content
+    `rfid`, `ibutton`, `scripts` and `serial`. Anything else in the protocol can be sent with `request()` using the PB.Main content
     field name, e.g. `await flipper.request(system_ping_request={"data": b"hi"})`.
     """
 
@@ -111,6 +112,7 @@ class Flipper:
         self.rfid = Rfid(self)
         self.ibutton = IButton(self)
         self.scripts = Scripts(self)
+        self.serial = Serial(self)
 
     @classmethod
     async def open(
